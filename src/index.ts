@@ -1,1 +1,1 @@
-export * from './core/Timeline.ts'
+export * from './core/Timeline'

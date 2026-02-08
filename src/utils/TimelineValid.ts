@@ -53,4 +53,14 @@ export class TimelineValid {
       throw Error('value of moment must within timeline\'s range')
     }
   }
+
+  /**
+   * check if canvas is a valid HTMLCanvasElement
+   * @param canvas
+   */
+  static toCanvas(canvas: any): void {
+    if (canvas && canvas.constructor.name !== 'HTMLCanvasElement') {
+      throw Error('canvas must be a valid HTMLCanvasElement')
+    }
+  }
 }

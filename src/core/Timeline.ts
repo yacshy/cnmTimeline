@@ -1,5 +1,5 @@
 import { TimelineValid } from '../utils/TimelineValid.ts'
-import { TimelineTick } from './TimelineTick.ts'
+import { TimelineTick } from './TimelineTick'
 
 /**
  * @prop {HTMLDivElement} container  timeline's container
@@ -7,7 +7,7 @@ import { TimelineTick } from './TimelineTick.ts'
  */
 export type CnmTimelineOptions = {
   container: HTMLDivElement
-  timeRange: [number, number],
+  timeRange: [number, number]
   moment: number
 }
 
@@ -22,7 +22,13 @@ export type CnmTimelineContainerSpecification = {
 
 export type ZoomEvent = {}
 
-export type SlideEvent = {}
+export type PanEvent = {}
+
+export type SelectEvent = {}
+
+const DEFAULT_ZOOM_RANK = 1
+
+let raf: number | undefined = undefined
 
 export class Timeline {
   protected _container: HTMLDivElement
@@ -31,7 +37,12 @@ export class Timeline {
   protected _moment: number
   protected _zoomRank: number
 
+  protected _canvas: HTMLCanvasElement
   protected _timeTick: TimelineTick
+
+  protected _zoomCallbacks: Set<(event: ZoomEvent) => void>
+  protected _panCallbacks: Set<(event: PanEvent) => void>
+  protected _selectCallbacks: Set<(event: PanEvent) => void>
 
   constructor({ container, timeRange, moment }: CnmTimelineOptions) {
     TimelineValid.toContainer(container)
@@ -41,41 +52,80 @@ export class Timeline {
     this._container = container
     this._timeRange = timeRange
     this._moment = moment
-    this._zoomRank = 1
+    this._zoomRank = DEFAULT_ZOOM_RANK
 
-    const width = this._container.clientWidth, height = this._container.clientHeight
+    const width = this._container.clientWidth
+    const height = this._container.clientHeight
+
     this._containerSpecification = { width, height }
     this._container.innerHTML = ''
+
+    const canvas: HTMLCanvasElement = document.createElement('canvas')
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    this._canvas = canvas
+
+    this._bindEventListeners()
 
     this._timeTick = new TimelineTick({
       width,
       height,
       timeRange: [timeRange[0], timeRange[1]],
       moment: moment,
-      zoomRank: 1
+      zoomRank: DEFAULT_ZOOM_RANK,
+      canvas: this._canvas
     })
-    this._timeTick.mount(this._container)
+
+    this._zoomCallbacks = new Set()
+    this._panCallbacks = new Set()
+    this._selectCallbacks = new Set()
   }
 
-  protected _zoom(): void {
+  protected _bindEventListeners(): void {
+    this._canvas.addEventListener('wheel', (event: WheelEvent) => {
+      this._zoom(event)
+    })
+
+    const onMousemove = (event: MouseEvent) => {
+      this._zoom(event)
+    }
+    const onMouseup = () => {
+      document.removeEventListener('mousemove', onMousemove)
+      document.removeEventListener('mouseup', onMouseup)
+    }
+    this._canvas.addEventListener('mousedown', () => {
+      raf = requestAnimationFrame(() => {
+        this._rerender()
+      })
+      document.addEventListener('mousemove', onMousemove)
+      document.addEventListener('mouseup', onMouseup)
+    })
   }
 
-  protected _pan(): void {
+  protected _unbindEventListeners(): void {}
+
+  protected _zoom(event: MouseEvent): void {
+    this._zoomCallbacks.forEach((callback) => callback(event))
   }
 
-  protected _select(): void {
+  protected _pan(event: MouseEvent): void {
+    this._panCallbacks.forEach((callback) => callback(event))
+  }
+
+  protected _select(event: MouseEvent): void {
+    this._selectCallbacks.forEach((callback) => callback(event))
   }
 
   public onZoom(callback: (event: ZoomEvent) => void): void {
-    callback({})
+    this._zoomCallbacks.add(callback)
   }
 
-  public onPan(callback: (event: SlideEvent) => void): void {
-    callback({})
+  public onPan(callback: (event: PanEvent) => void): void {
+    this._panCallbacks.add(callback)
   }
 
-  public onSelect(callback: (event: SlideEvent) => void): void {
-    callback({})
+  public onSelect(callback: (event: SelectEvent) => void): void {
+    this._selectCallbacks.add(callback)
   }
 
   /**
@@ -100,9 +150,11 @@ export class Timeline {
    * render timeline component
    */
   public render(): void {
-    const width = this._container.clientWidth, height = this._container.clientHeight
+    const width = this._container.clientWidth
+    const height = this._container.clientHeight
     this._containerSpecification = { width, height }
+  }
 
-
+  protected _rerender(): void { 
   }
 }
