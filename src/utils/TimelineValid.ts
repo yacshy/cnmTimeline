@@ -1,3 +1,5 @@
+import Konva from 'konva'
+
 export class TimelineValid {
   constructor() {
   }
@@ -38,6 +40,9 @@ export class TimelineValid {
     if (!this.isArray(timeRange) || timeRange.length !== 2 || !this.isNumber(timeRange[0]) || !this.isNumber(timeRange[1])) {
       throw Error('timeRange must be a Array of length 2 with all number item')
     }
+    if (timeRange[1]  - 10  <= timeRange[0]) {
+      throw Error('timeRange[0] must be less than timeRange[1] minus 10ms')
+    }
   }
 
   /**
@@ -49,8 +54,8 @@ export class TimelineValid {
     if (!this.isNumber(moment)) {
       throw Error('moment must be a number')
     }
-    if (!(timeRange[0] <= moment && moment <= timeRange[1])) {
-      throw Error('value of moment must within timeline\'s range')
+    if (moment < timeRange[0] || moment > timeRange[1]) {
+      throw Error('moment must be within timeRange')
     }
   }
 
@@ -58,9 +63,9 @@ export class TimelineValid {
    * check if canvas is a valid HTMLCanvasElement
    * @param canvas
    */
-  static toCanvas(canvas: any): void {
-    if (canvas && canvas.constructor.name !== 'HTMLCanvasElement') {
-      throw Error('canvas must be a valid HTMLCanvasElement')
+  static toCanvasLayer(canvasLayer: any): void {
+    if (canvasLayer && canvasLayer.constructor.name !== 'Layer') {
+      throw Error('canvasLayer must be a valid Konva.Layer')
     }
   }
 }
