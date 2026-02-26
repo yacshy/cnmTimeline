@@ -19,6 +19,7 @@ import {
   TIMELINE_MINUTE_TICK_HEIGHT_PERCENTAGE,
   TIMELINE_SECOND_TICK_HEIGHT_PERCENTAGE
 } from '@/config/timelineTicks'
+import dayjs from 'dayjs'
 import Konva from 'konva'
 
 /**
@@ -95,6 +96,19 @@ export class TimelineTicks {
           fill: TIMELINE_MONTH_TICK_FILL,
           height: tickHeight
         })
+        const tickText = new Konva.Text({
+          x: (ms - _timeRange[0]) * (_width / _zoomRank),
+          y: 5,
+          text: `${dayjs(ms).format('YYYY-MM')}`,
+          fontSize: 12,
+          fill: TIMELINE_DAY_TICK_FILL
+        })
+        tickText.setAttrs({
+          x: (ms - _timeRange[0]) * (_width / _zoomRank) - tickText.width() / 2
+        })
+        if (tickText.width() + 10 < tickDistance) {
+          _ticksKonvaLayer.add(tickText)
+        }
         _ticksKonvaLayer.add(tick)
       })
     }
@@ -115,6 +129,19 @@ export class TimelineTicks {
           fill: TIMELINE_DAY_TICK_FILL,
           height: tickHeight
         })
+        const tickText = new Konva.Text({
+          x: (ms - _timeRange[0]) * (_width / _zoomRank),
+          y: 5,
+          text: `${dayjs(ms).format('YYYY-MM-DD')}`,
+          fontSize: 12,
+          fill: TIMELINE_DAY_TICK_FILL
+        })
+        tickText.setAttrs({
+          x: (ms - _timeRange[0]) * (_width / _zoomRank) - tickText.width() / 2
+        })
+        if (tickText.width() + 10 < tickDistance) {
+          _ticksKonvaLayer.add(tickText)
+        }
         _ticksKonvaLayer.add(tick)
       })
     }

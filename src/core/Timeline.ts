@@ -31,12 +31,26 @@ export class Timeline {
     this._timeTicks = new TimelineTicks(this._timelieState)
     this._timeHand = new TimelineHand(this._timelieState)
 
+    this._bindEventListeners()
+  }
+
+  protected _bindEventListeners(): void {
     this.onZoom((event) => {
       this.render()
     })
-  }
 
-  protected _unbindEventListeners(): void {}
+    this.onSelect((event) => {
+      this.render()
+    })
+
+    this.onPan((event) => {
+      this.render()
+    })
+
+    this.onSlide((event) => {
+      this.render()
+    })
+  }
 
   public onZoom(callback: (event: ZoomEvent) => void): void {
     this._timelieState.onZoom(callback)
@@ -48,6 +62,10 @@ export class Timeline {
 
   public onSelect(callback: (event: SelectEvent) => void): void {
     this._timelieState.onSelect(callback)
+  }
+
+  public onSlide(callback: (event: SelectEvent) => void): void {
+    this._timelieState.onSlide(callback)
   }
 
   /**
@@ -70,10 +88,8 @@ export class Timeline {
    * render timeline component
    */
   public render(): void {
-    this._timelieState.clearStage()
+    this._timelieState.cleanStage()
     this._timeHand.render()
     this._timeTicks.render()
   }
-
-  protected _rerender(): void {}
 }

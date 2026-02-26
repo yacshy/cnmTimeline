@@ -1,5 +1,6 @@
 import Konva from 'konva'
 import { TimelineValid } from '@/utils/TimelineValid'
+import { BASE_ZOOM_FACTOR } from '@/config/timelineState'
 
 /**
  * @prop {HTMLDivElement} container  timeline's container
@@ -11,11 +12,13 @@ export type CnmTimelineOptions = {
   moment: number
 }
 
-export type ZoomEvent = {}
-
-export type PanEvent = {}
-
-export type SelectEvent = {}
+export type ZoomEvent = {
+  state: TimelineState
+  event: MouseEvent
+}
+export type PanEvent = ZoomEvent
+export type SelectEvent = ZoomEvent
+export type SlideEvent = ZoomEvent
 
 export class TimelineState {
   public _container: HTMLDivElement
@@ -31,7 +34,8 @@ export class TimelineState {
 
   public _zoomCallbacks: Set<(event: ZoomEvent) => void>
   public _panCallbacks: Set<(event: PanEvent) => void>
-  public _selectCallbacks: Set<(event: PanEvent) => void>
+  public _selectCallbacks: Set<(event: SelectEvent) => void>
+  public _slideCallbacks: Set<(event: SelectEvent) => void>
 
   constructor({ container, moment, timeRange }: CnmTimelineOptions) {
     TimelineValid.toContainer(container)
@@ -62,11 +66,31 @@ export class TimelineState {
     const handLayer = new Konva.Layer()
     stage.add(handLayer)
 
-    stage.on('wheel', (event) => {
-      event.evt.preventDefault()
-      const zoomFactor = event.evt.deltaY > 0 ? 0.9 : (1 / 0.9)
+    this._bindZoomEventOnStage()
+    this._bindSelectEventOnStage()
+    this._bindPanEventOnStage()
+    this._bindSlideEventOnStage()
+    this._bindContextMenuEventOnStage()
 
-      const currentMousePos = stage.getPointerPosition()!
+    this._handKonvaLayer = handLayer
+    this._ticksKonvaLayer = ticksLayer
+
+    this._zoomCallbacks = new Set()
+    this._panCallbacks = new Set()
+    this._selectCallbacks = new Set()
+    this._slideCallbacks = new Set()
+  }
+
+  public get _msPerPixel(): number {
+    return this._zoomRank / this._width
+  }
+
+  protected _bindZoomEventOnStage(): void {
+    this._konvaStage.on('wheel', (event) => {
+      event.evt.preventDefault()
+      const zoomFactor = event.evt.deltaY > 0 ? 1 / BASE_ZOOM_FACTOR : BASE_ZOOM_FACTOR
+
+      const currentMousePos = this._konvaStage.getPointerPosition()!
       const currentMousePosMappingToTimeStamp = this._timeRange[0] + currentMousePos.x * this._msPerPixel
 
       this._zoomRank *= zoomFactor
@@ -76,17 +100,137 @@ export class TimelineState {
       ]
       this._zoom(event.evt)
     })
-
-    this._handKonvaLayer = handLayer
-    this._ticksKonvaLayer = ticksLayer
-
-    this._zoomCallbacks = new Set()
-    this._panCallbacks = new Set()
-    this._selectCallbacks = new Set()
   }
 
-  public get _msPerPixel(): number {
-    return this._zoomRank / this._width
+  protected _bindSelectEventOnStage(): void {
+    const mousedonwListener = (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (event.evt.button !== 0) {
+        return
+      }
+      const currentMousePos = this._konvaStage.getPointerPosition()!
+      this._moment = this._timeRange[0] + currentMousePos.x * this._msPerPixel
+      this._select(event.evt)
+    }
+    this._konvaStage.on('mousedown', mousedonwListener)
+  }
+
+  protected _bindPanEventOnStage(): void {
+    const OFFSET_X_STEP = 1
+
+    let timer: number | undefined = undefined
+    let xPosRecord = 0
+    let autoPanning = false
+
+    const mousemoveListener = (event: Konva.KonvaEventObject<MouseEvent>) => {
+      const currentMousePos = this._konvaStage.getPointerPosition()!
+      const offsetXPos = currentMousePos.x - xPosRecord
+      xPosRecord = currentMousePos.x
+
+      if (20 < currentMousePos.x && currentMousePos.x < this._width - 20) {
+        clearInterval(timer)
+        autoPanning = false
+        this._moment = this._timeRange[0] + currentMousePos.x * this._msPerPixel
+        this._pan(event.evt)
+        return
+      }
+
+      if (autoPanning) {
+        return
+      }
+      autoPanning = true
+      clearInterval(timer)
+      this._moment = this._timeRange[0] + currentMousePos.x * this._msPerPixel
+
+      // when this._moment follow mouse move to the left of the timeline, the time range should be shifted to the left
+      if (currentMousePos.x <= 20 && offsetXPos < 0) {
+        timer = setInterval(() => {
+          this._timeRange = [
+            this._timeRange[0] - OFFSET_X_STEP * this._msPerPixel,
+            this._timeRange[1] - OFFSET_X_STEP * this._msPerPixel
+          ]
+          this._moment -= OFFSET_X_STEP * this._msPerPixel
+          this._pan(event.evt)
+        }, 0.01 * 1000)
+      }
+      // when this._moment follow mouse move to the right of the timeline, the time range should be shifted to the right
+      else if (currentMousePos.x >= this._width - 20 && offsetXPos > 0) {
+        timer = setInterval(() => {
+          this._timeRange = [
+            this._timeRange[0] + OFFSET_X_STEP * this._msPerPixel,
+            this._timeRange[1] + OFFSET_X_STEP * this._msPerPixel
+          ]
+          this._moment += OFFSET_X_STEP * this._msPerPixel
+          this._pan(event.evt)
+        }, 0.01 * 1000)
+      }
+    }
+
+    const mouseupListener = (event?: Konva.KonvaEventObject<MouseEvent>) => {
+      // const currentMousePos = this._konvaStage.getPointerPosition()!
+      // console.log('mouseup: ', currentMousePos.x)
+      clearInterval(timer)
+      this._konvaStage.off('mousemove', mousemoveListener)
+      this._konvaStage.off('mouseup', mouseupListener)
+      this._konvaStage.off('mouseleave', mouseupListener)
+    }
+
+    this._konvaStage.on('mousedown', (event) => {
+      if (event.evt.button !== 0) {
+        return
+      }
+      this._konvaStage.on('mousemove', mousemoveListener)
+      this._konvaStage.on('mouseup', mouseupListener)
+      this._konvaStage.on('mouseleave', mouseupListener)
+    })
+  }
+
+  protected _bindSlideEventOnStage(): void {
+    let xPosRecord = 0
+    let timeRangeRecord: [number, number] = [...this._timeRange]
+
+    const mousemoveListener = (event: MouseEvent) => {
+      const currentMousePos = this._konvaStage.getPointerPosition()!
+      const offsetXPos = currentMousePos.x - xPosRecord
+
+      this._timeRange = [
+        timeRangeRecord[0] - offsetXPos * this._msPerPixel,
+        timeRangeRecord[1] - offsetXPos * this._msPerPixel
+      ]
+
+      this._slide(event)
+    }
+
+    const mouseupListener = (event?: MouseEvent) => {
+      document.removeEventListener('mousemove', mousemoveListener)
+      document.removeEventListener('mouseup', mouseupListener)
+      document.removeEventListener('mouseleave', mouseupListener)
+    }
+
+    this._konvaStage.on('mousedown', (event) => {
+      if (event.evt.button !== 2) {
+        return
+      }
+      const currentMousePos = this._konvaStage.getPointerPosition()!
+      xPosRecord = currentMousePos.x
+      timeRangeRecord = [...this._timeRange]
+      mouseupListener()
+      document.addEventListener('mousemove', mousemoveListener)
+      document.addEventListener('mouseup', mouseupListener)
+      document.addEventListener('mouseleave', mouseupListener)
+    })
+  }
+
+  protected _bindContextMenuEventOnStage(): void {
+    const contextmenuListener = (event: MouseEvent) => {
+      event.preventDefault()
+    }
+
+    this._konvaStage.on('mouseenter', (event) => {
+      document.addEventListener('contextmenu', contextmenuListener)
+    })
+    this._konvaStage.on('mouseleave', (event) => {
+      document.removeEventListener('contextmenu', contextmenuListener)
+    })
   }
 
   public updateTimeRange(timeRange: [number, number]): void {
@@ -100,15 +244,31 @@ export class TimelineState {
   }
 
   protected _zoom(event: MouseEvent): void {
-    this._zoomCallbacks.forEach((callback) => callback(event))
+    this._zoomCallbacks.forEach((callback) => callback({
+      state: this,
+      event
+    }))
   }
 
   protected _pan(event: MouseEvent): void {
-    this._panCallbacks.forEach((callback) => callback(event))
+    this._panCallbacks.forEach((callback) => callback({
+      state: this,
+      event
+    }))
   }
 
   protected _select(event: MouseEvent): void {
-    this._selectCallbacks.forEach((callback) => callback(event))
+    this._selectCallbacks.forEach((callback) => callback({
+      state: this,
+      event
+    }))
+  }
+
+  protected _slide(event: MouseEvent): void {
+    this._slideCallbacks.forEach((callback) => callback({
+      state: this,
+      event
+    }))
   }
 
   public onZoom(callback: (event: ZoomEvent) => void): void {
@@ -123,7 +283,11 @@ export class TimelineState {
     this._selectCallbacks.add(callback)
   }
 
-  public clearStage(): void {
+  public onSlide(callback: (event: SlideEvent) => void): void {
+    this._slideCallbacks.add(callback)
+  }
+
+  public cleanStage(): void {
     this._handKonvaLayer.removeChildren()
     this._ticksKonvaLayer.removeChildren()
   }

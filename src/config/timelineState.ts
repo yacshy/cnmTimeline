@@ -1,0 +1,1 @@
+export const BASE_ZOOM_FACTOR = 0.8
